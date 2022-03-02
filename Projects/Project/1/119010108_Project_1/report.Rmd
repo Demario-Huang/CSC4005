@@ -1,0 +1,491 @@
+---
+title: "CSC4005_A1_Report"
+author: "119010108_HuangPengxiang"
+date: "10/13/2021"
+output:
+  pdf_document: default
+header-includes: \usepackage{setspace}\doublespacing
+spacing: double
+---
+
+ 
+\newpage
+\tableofcontents
+\newpage
+```{r setup, include=FALSE,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+  In this project, I designed a parallel odd-even transposition sort by using MPI. I run my project in the Slurm server, and collect the data of
+running program time duration. Also I separate those data based on different variables, for each variable, I analysis the program performance and
+check whether this variable have the significant influence for parallel odd-even sort. Moreover, This project also cover the comparison of the
+performance between the parallel program and sequential program. 
+  
+# How to run my program
+
+```{markdown}
+#In order to run my program, you can run it on Slurm or you can also run it in local, and you 
+need to make sure you already set the environment for mpi
+
+And I use "salloc" to test my program in slurm
+
+# It contanins two parts
+# first you need to open the /src/generatenum.c to generate numbers
+$ gcc -o generate generate.c && ./generate # use this to generate the in.txt
+
+# second to test the program
+$ cd .. 
+$ mkdir build && cd build 
+$ cmake .. -DCMAKE_BUILD_TYPE=Debug # please modify this to `Release` if you
+want to benchmark your program
+$ cmake --build . -j4 # make the program
+
+$ salloc -N4 -n128 -t5
+$./gtest_sort # first test
+$ mpirun -np /* num of core */ ./main ../src/in.txt ../src/out.txt
+# which allows you from the in.txt read the random number and write it oderly in out.txt
+```
+
+## The sample output screeen shot
+
+The sample output is showing below:
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/2.png")
+```
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/3.png")
+```
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/4.png")
+```
+
+# Basic background
+
+## Parallel Odd-Even Transposition Sort
+
+### What is Parallel Odd-Even Transposition 
+
+  Odd-Even Transposition Sort is a parallel sorting algorithm. It is based on the Bubble Sort technique, which compares every 2 consecutive numbers in the array and swap them if first is greater than the second to get an ascending order array. First step.Insides each process, compare the odd element with the posterior even element in odd iteration, or the even element with the posterior odd element in even iteration respectively. Swap the elements if the posterior element is smaller. Second step, If the current process rank is P, and there some elements that are left over for comparison in step 1, Compare the boundary elements with process with rank P-1 and P+1. If the posterior element is smaller, swaps them.  Repeat 1-2 until the numbers are sorted. You can clear understand it in the below figure
+  
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/1.png")
+```
+  
+### The complexity of Parallel Odd-Even Transposition Sort && Some declarations in my program
+
+  The approach of Parallel Odd-Even Transposition Sort is basically the same as Bubble sort, which is always keep `O(N^2)`. And in my program, I didn't do the check when the array is already sorted, so the complexity of my sort is always keep `O(N^2)` in every case. **And MOST IMPORTANTLY, I think we can not do the check step inside the program in order to uniquely control variable**. For instance, if we generate the array randomly, it may appear that The aleady sorted array (best case) for 1 core, 100 array size to run, it only need to run 1 time to check every element in it then return, which is `O(1)`. However, if we generate the array again, and this time is the worst case, for 4 core to run, the time duration is obviously longer than the previous one, which is much less than `O(N^2)` but still bigger than `O(1)`. So, in order to control the unique variable and avoid accident case, I refuse this case happens. It means that no matter what array is, the complexity in my program is `O(N^2)`. 
+
+  
+## MPI Programming
+
+### What is MPI Progamming and Parallel Computing
+
+  Message Passing Interface (MPI) is a communication protocol for parallel programming. MPI is specifically used to allow applications to run in parallel across a number of separate computers connected by  **network** (may have some influence on the sort performance, will introduce later). MPI's goals are high performance, scalability, and portability. MPI remains the dominant model used in high-performance computing today.
+
+### What is the MPI's Topologies in my program
+  
+  In standard MPI topology, A communicator describes a group of processes, but the structure of your computation may not be such that every process will communicate with every other process. For instance, in a computation that is mathematically defined on a Cartesian 2D grid, the processes themselves act as if they are two-dimensional ordered and communicate with N/S/E/W neighbors. If MPI had this knowledge about your application, it could conceivably optimize for it, for instance by renumbering the ranks so that communicating processes are closer together physically in your cluster. you may understand in the following figure.
+  
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/5.png")
+```
+  
+  **But in my program**, I just view all of core in different rank as a mathematically a line, one-dim. each rank represent a graphic element which can process the data, can also contains one ore more cpu in it. They can communicate with the adjacent rank element by specific functions. The way they communicate each other in order to implement the odd even sort is like the follwing figure.
+  
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/6.png")
+```
+  
+### MPI function I have used in my program
+
+  I have used `MPI_Bcast function` to board cast the root inforamtion to the other rank.
+```{markdown}
+#include "mpi.h"
+int MPI_Bcast(
+    void        *buffer,
+    int          count,
+    MPI_Datatype datatype,
+    int          root,
+    MPI_Comm     comm
+);
+```
+
+  `MPI_Scatterv` function to Scatters data from one member across all members of a group. 
+```{markdown}
+int MPI_Scatterv(
+  _In_  void         *sendbuf,
+  _In_  int          *sendcounts,
+  _In_  int          *displs,
+        MPI_Datatype sendtype,
+  _Out_ void         *recvbuf,
+        int          recvcount,
+        MPI_Datatype recvtype,
+        int          root,
+        MPI_Comm     comm
+);
+```
+
+  `MPI_Gatherv` to Gathers variable data from all members of a group to one member.
+```{markdown }
+int MPI_Gatherv(
+  _In_      void         *sendbuf,
+            int          sendcount,
+            MPI_Datatype sendtype,
+  _Out_opt_ void         *recvbuf,
+  _In_opt_  int          *recvcounts[],
+  _In_opt_  int          *displs[],
+            MPI_Datatype recvtype,
+            int          root,
+            MPI_Comm     comm
+);
+```
+
+  also use `Send` and `Recv` to send and recieve the information from the adjacent rank
+```{markdown }
+int MPI_Send(
+		void* msg_buf_p,	 
+		int msg_size,			
+		MPI_Datatype msg_type,	
+		int dest,				
+		int tag,				
+		MPI_Comm communicator	
+);
+int MPI_Recv(
+		void* msg_buf_p,		
+		int buf_size,		
+		MPI_Datatype buf_type,
+		int source,				
+		int tag,				
+		MPI_Comm communicator,	
+		MPI_Status* status_p	
+);
+```
+
+## What is Slurm Sever and How Does it Influence My Program
+  The Slurm Workload Manager, formerly known as Simple Linux Utility for Resource Management (SLURM), or simply Slurm, is a free and open-source job scheduler for Linux and Unix-like kernels, used by many of the world's supercomputers and computer clusters.
+  Slurm has many way to submit the homework. But in my program, I just used one way named `salloc`, which is an interactive way. The command is like that
+```{markdown}
+$ salloc -N2 -n48 -t10
+# for example, it will prepare a session with cores distributed on two
+nodes and the session can last for mins:
+$ scancel --user=$(whoami)
+# cancel my application
+```
+
+### What Is Node and How it Inluence My Program
+
+  A node is a connection point inside a network that can receive, send, create, or store data. Each node requires you to provide some form of identification to receive access, like an IP address. A few examples of nodes include computers, printers, modems, bridges, and switches.A node is any physical device within a network of other tools that’s able to send, receive, or forward information. A personal computer is the most common node. It's called the computer node or internet node.
+  In our server, it may looks like:
+  
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/7.png")
+```
+
+  And in the follwing report, I found that **the time duration will influenced by the number of nodes and the allocations of node**. since the communication between each node will consume time, and it will have latency for the algorithm, so it will cause some difference even if you use the same number of cores but will not the same number of node. It will be shown and proofed in the next with detailed data.
+  
+### What Does Internet Connection Influence My Program && Some Issues
+
+  During the experiment, I found that the internet connection is not stable when the people are too crowded in server. It may have more possibility to have higher latency. so I am afraid it may have an influence my data and further analysis. **It is also a limitation of this project**. 
+  And also, I have encoutered this issue when I do the experiment. My WLAN network is still good but I found that the connection with server is not stable and shown the issue below and I can not run program. And the solution for me is to wait, after I wait couple seconds or even more, then I can run my program.
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/8.png")
+```
+
+# The Design of This Program 
+
+## Program Design
+
+The program flow is showing below:
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/9.png")
+```
+
+## Data Structure Design
+
+  To avoid change the original data, I use the array to store the parameter passed in the program and sort the array, finally send the data back to the place where it should be.
+  It may looks like that:
+  
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/10.png")
+```
+
+## Design of Experiment
+  
+  As we reported before, The complexity of sequential `O(n^2)` obviously, and I am curious about the Time complexity of Parallel computing, and how  does other variable affect the time duration. 
+  During the background information, I predict that the follwing element may have a influence for the sort performance.
+
+- Array size
+- Number of Core
+- Number of Node and Its Allocation
+
+The outline of my experiment is that:
+
+* First we compare the performance between Parallel and Sequential roughly, and find their apparantly difference. (**Notice**: need to control the same node,which is one, and the same array size.)
+* Second we compare the array size does what influence for parallel sort. (Node 1, and we have 32 core to run this program)
+* Third we compare the number of cores will do what affect (set array size is 10000, and increase the core from 2 to 128)
+* then we find how number of node affect our performance
+* finally, we combine those together to find out the time complexity for parallel computing in this sort and DO the regression to find out the model of Parallel sort. 
+  
+# The Experiment Data And Analysis
+
+  As reported in Design of Experiment, The experiment analysis is separated into 5 parts.
+  
+## Declarations
+  
+  **We only use Time Duration to measure the performance. If this condition could sort the array in a less time compared to another, we say this one has better performance**
+  
+## Parallel vs. Sequential
+
+  To compare the performance between the Parallel sort and Sequential sort, **First we need to concer the array size**. It means that we have to compare the performance in different length of array.
+
+### For the large size array
+  
+  For the lagrge array, i first pick 5 thousand, we found that the Paralle sort is much better than Sequential one. **The figure showing below is the Node 1, and the x-axis is the number of core, which range in (1,2,4,8,16,32). the y-axis is the time duration**
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/11.png")
+```
+
+  Then I pick 10 thousand data size, and I found almost the same shape figure as 5 thousand.
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/12.png")
+```
+  
+  **Analysis**
+```{r}
+# For input size is 5000, the time is (ns)
+time_dur_core1 = 123879672
+time_dur_core2 = 62573025
+time_dur_core4 = 36900207
+time_dur_core8 = 22312568
+time_dur_core16 = 15509580
+time_dur_core32 = 14126808
+```
+  
+we first compare the Sequential one (time_dur_core1) with the Parallel one (time_dur_core32) and we found that: The parallel one almost save 8.7 times of Squential one. which means, only In the time point of view, **Parallel sort has much less time consumption with Sequential one**. 
+
+```{r}
+print(time_dur_core1/time_dur_core32)
+```
+
+However, I found an another fact, that. time_dur_core1/time_dur_core2 is almost 2, and time_dur_core16/time_dur_core32 is almost 1. Logically, in ideal odd even sort, the core 2 should have 2 speed than core 1, and similarly, core 32 should have 2 times speed than core 16. but core 32 is almost the same as core 16. what affect that? **It means that when data size is large, the commnucation between each core in the same node also time consuming**
+
+```{r}
+print(time_dur_core16/time_dur_core32)
+```
+
+### For the small size array 
+
+The data is showing below
+```{r include=TRUE,warning=FALSE}
+# the size of array is 12, time is (ns)
+time_dur <- c(91357,437356,804708,1265617)
+core_num <- c(1,2,3,4)
+plot(core_num,time_dur,type ="o")
+```
+
+  we can easily found that, for the small size data, The sequential one is much better than Parallel one, which also shows that the commnucation between each core in the same node also time consuming. In this case, the communication time even larger than sort time. 
+
+**one extreme case**:
+  
+  If the core number even exceed the size of array, of course the program may have some fault. But it is ok when I run it in my mac.My program wiil allow you to allocate the 0 cores in a rank.  Anyway, **Don't test my parallel program when array size even smaller than cores.** 
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/13.png")
+```
+
+## How Array size affect Performance
+
+  To test the how array size affect the performance, I first set the core number is 16. And to avoid the small size bring more significant latency between communication, I set the data size range in (100, 1k, 5k, 1w, 5w,10w). And Then I plot the graph for that. 
+
+```{markdown}
+# the x-axis represent the data size from 100~100000, the y-axis represent the time duration
+```
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/14.png")
+```
+
+  **Analysis**
+
+we can easily found that, with the increase data size with 10 times, the during time will also increse almost 10 times. 
+
+```{r include=TRUE,warning=FALSE}
+time_size1w = 45930978
+time_size10w = 4180986908
+time_size5w = 1020206504
+time_size500 = 1354113
+time_size5k = 14868410
+
+print(time_size10w/time_size1w)
+print(time_size5w/time_size5k)
+print(time_size5k/time_size500)
+```
+
+
+  This data is mostly used for compute the time complexity. However, when I compute the size 5k/500, I get the number close to 10. which means that: The complexity for Parallel is `O(N)`. However, when I do the another comparison, which is 5w/5k, it get almost 7. Even, 10w/1w is almost get 100! It is totally don't obey the idea rule for parallel computing. The reason for that may be the fowlling:
+
+* The communication for large data is very time consuming for each rank in mpi.
+* The communication for large data is also time consuming for each node
+* The case will be even worse if the data need to communicate with each rank, and then still need to transport to another Node.
+
+**It means that the degree of communication latency will be Square, intuitively.**
+
+And I test another data to reproof my analysis. (32 core, data size range in (100, 1k, 5k, 1w, 5w,10w)). It have the same shape with the previous one. 
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/15.png")
+```
+
+## How number of cores affect Performance.
+
+  For this case, I design it very in a simple way. First I make the size of array to 10w. the number of core is range in (1,2,4,8,16,32,64,128) And I observed the follwing result.
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/16.png")
+```
+
+  We can observe that when the number of core decrease, the time will also increase.
+
+```{r}
+core16_sie10w = 4221353766
+core32_size10w = 2207320400
+core64_size10w = 1226279018
+core128_size10w = 866243730
+
+print(core16_sie10w/core32_size10w)
+print(core32_size10w/core64_size10w)
+print(core64_size10w/core128_size10w)
+```
+
+  But stil, with the node and core increase, the value will decrease, which idealy will be 2.
+  
+And moreover, with the core increase, the time even increase. Another data: (1w array size)
+
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/17.png")
+```
+
+The reason for that is: When core increase from 32 to 64, it means that we use 2 node fully(in this case). and from 64 core to 128 core, we use 4 node fully. The communication time cost may have more influence than its performance improvement by the increase of the core. And we also design a experiment to check whether this hypothesis is right. 
+
+## How Node allocations affect the performance
+
+  We design a experiment with core number 32 totally, data size is 10000. And we have 3 allocations, which is (32,0,0,0),(16,16,0,0),(8,8,8,8). If 3 allocation have the same performance, we could say, Node allcoation have no influence on performance, however, we have to adimit the Node allocation will affect the performance.
+  
+```{markdown}
+# can be designed by following steps
+$ salloc -N1 -n32 --ntasks-per-node=32 
+$ salloc -N2 -n32 --ntasks-per-node=16 
+$ salloc -N4 -n32 --ntasks-per-node=8
+```
+  
+The time for (16,16,0,0)
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/18.png")
+```
+
+The time for (32,0,0,0)
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/19.png")
+```
+
+The time for (8,8,8,8)
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/20.png")
+```
+
+
+  Then I found that the (32,0,0,0) > (16,16,0,0) > (8,8,8,8), with almost 2 times of the other. It means that the allocation of node have influence on the performance. Also, we also can conclude that: **the time communication latency between each node is longer than the latency between each core in the same node.** Hence, If we would better let the core in one node as much as possible to improve the performance.
+
+## The Regression Model for Parallel Time Complexity
+
+To compute the Time complexity for the Parallel, We need to build a model for it. From the previous analysis, we can divide the Time complexity into 2 parts, first is computation part, second is communication part. T$_{p}$ = T$_{compute}$ + T$_{communicate}$. For the communication part. 
+
+
+T$_{communication}$ = T$_{startup}$ + n$_{1}$T$_{coretrans}$ + n$_{2}$T$_{nodetrans}$
+
+- T$_{startup}$ represent the Message latency (assume constant)
+- T$_{coretrans}$ represent the latency from one core to another, within a node.
+- T$_{nodetrans}$ represent the latency from one node to another
+- n$_{1}$ represent the message number need to transfer to another core 
+- n$_{1}$ represent the message number need to transfer to another node
+
+For computation part, which is much easier. If we assume the latency of computation is constant, then The computation part is `O(N)`, which is linear with the array size. **Then, we can make a assumption that the Big(O) for Parallel is `O(N)`.** because the communication is O(n) and computation is also O(n), theoretically. 
+
+The model for time complexity is linear, theoretically.  Then I use the my data to try to prove it. 
+
+```{r include=TRUE,warning=FALSE}
+# I use the data in the "Array size analysis" (100,250, 500,1000, 5k, 1w, 5w,10w)
+mysize <- c(100, 250,500,1000 ,5000,10000,50000,100000)
+mytime <- c(992233,1293,1354113,14023141,1486410,45930978,1020206504,4180986908)
+data <- data.frame(mysize,mytime)
+myfit <- lm(mytime~mysize,data)
+summary(myfit)
+```
+
+We found that the Multiple R-squared: 0.9398 nad Adjusted R-squared:  0.9298, which is high. Then we can say the time complexity for this model Linear.
+
+
+# Conclusion
+
+## The performance Summary
+  
+  From the previous analysis, The performance mainly is depend on array size. When the size is very small (such as 20), The Sequential performs better than parallel. When the size is at medium, not very large and not very small, paralle sort with less nodes perform better, since we conclude that the communication between nodes is kind of time consuming. For the very large array, then since we only have 32 cores per node, then we have to choose more node to satify computing requirements, but we also need to put as much cores in less nodes as possible.
+  
+## Limitaiton of My Project
+
+  The biggest limitation is not enough data for further analysis. the data size is not enough for the regression proof. without much data, the analysis will also be influenced by accident data. But due to the time strict on server, I only get those data. Another Limitation is that there are few approach to know how the communication between nodes and cores affect performance. cause I think the number of data which needed to be trasnported to another is random. so maybe the model is not fair enough to prove linear time complexity.
+  
+## Conclutions
+  
+  Based on MPI, This project recover the parallel odd-even transposition sort and analyze its performance for each case. 
+  
+# Appendix
+
+there are few sreenshots of my running results to show my data authenticity.
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/21.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/22.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/23.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/24.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/25.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/26.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/27.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/28.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/29.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/30.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/18.png")
+```
+```{r, echo=FALSE , out.width="80%"}
+knitr::include_graphics("/Users/huangpengxiang/Desktop/pic/18.png")
+```
+

@@ -1,0 +1,1 @@
+/opt/llvm/bin/clang++ -O3 -DNDEBUG -rdynamic CMakeFiles/main_2.dir/src/main_2.cpp.o CMakeFiles/main_2.dir/src/graphic.cpp.o -o main_2  libimgui.a /usr/lib64/libfreetype.so /usr/lib64/libSDL2.so /usr/lib64/libGLX.so /usr/lib64/libOpenGL.so -ldl 
