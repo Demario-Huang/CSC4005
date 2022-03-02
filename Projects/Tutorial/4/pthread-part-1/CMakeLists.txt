@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.8)
+project(examples)
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_FLAGS "-march=native -flto -O3")
+find_package(Threads REQUIRED)
+
+add_executable(example-1 exp-1.cpp)
+add_executable(example-2 exp-2.cpp)
+add_executable(example-3 exp-3.cpp)
+add_executable(example-4 exp-4.cpp)
+target_link_libraries(example-1 Threads::Threads)
+target_link_libraries(example-2 Threads::Threads)
+target_link_libraries(example-3 Threads::Threads)
+target_link_libraries(example-4 Threads::Threads)

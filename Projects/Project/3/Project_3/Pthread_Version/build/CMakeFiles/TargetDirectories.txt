@@ -1,0 +1,4 @@
+/Users/huangpengxiang/Desktop/CSC 4005/Project/3/Project_3/Pthread_Version/build/CMakeFiles/rebuild_cache.dir
+/Users/huangpengxiang/Desktop/CSC 4005/Project/3/Project_3/Pthread_Version/build/CMakeFiles/edit_cache.dir
+/Users/huangpengxiang/Desktop/CSC 4005/Project/3/Project_3/Pthread_Version/build/CMakeFiles/csc4005_imgui.dir
+/Users/huangpengxiang/Desktop/CSC 4005/Project/3/Project_3/Pthread_Version/build/CMakeFiles/core.dir

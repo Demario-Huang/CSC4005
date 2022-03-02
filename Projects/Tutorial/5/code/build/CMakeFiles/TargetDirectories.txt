@@ -1,0 +1,7 @@
+/mnt/host/code/build/CMakeFiles/rebuild_cache.dir
+/mnt/host/code/build/CMakeFiles/edit_cache.dir
+/mnt/host/code/build/CMakeFiles/imgui.dir
+/mnt/host/code/build/CMakeFiles/main_3.dir
+/mnt/host/code/build/CMakeFiles/main_2.dir
+/mnt/host/code/build/CMakeFiles/main_4.dir
+/mnt/host/code/build/CMakeFiles/main_1.dir
